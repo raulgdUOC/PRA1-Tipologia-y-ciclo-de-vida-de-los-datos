@@ -8,16 +8,16 @@ import threading
 import concurrent.futures
 from time import sleep
 from random import randint
-
+from requestClassModified import RequestModified
 import csv
 class imdbDataSet:
     def __init__(self, genere, type_):
-        self.lock = threading.Lock()
-        self.proxys = load_proxy()
-        self.scrapper = cloudscraper.create_scraper()
+
+
         self.genere = genere
         self.title_type = type_
-        self.templateURL = self.generateURL()
+        self.scrapper = RequestModified()
+        self.templateURL = self.generate_url()
         self.dataset = defaultdict(list)
         self.header = {
                         'Accept':
@@ -37,209 +37,147 @@ class imdbDataSet:
                         }
         self.films_scraped = 0
 
-
-    def get_response(self, URL: str):
-        while True:
-            self.lock.acquire()
-            proxy = self.proxys.get()
-            self.lock.release()
-            if self.proxys.empty():
-                print("LOADING")
-                self.proxys = load_proxy()
-
-            try:
-                # sleep(randint(1, 2))
-                res = self.scrapper.get(URL,
-                                        proxies={"http": proxy,
-                                                 "https": proxy},
-                                        headers=self.header,
-                                        timeout=10)
-
-            except Exception as e:
-                # print(e)
-                continue
-            if res.status_code == 200:
-                # print(res.status_code)
-                self.lock.acquire()
-                self.proxys.put(proxy)
-                self.lock.release()
-                return res
-            else:
-                print(res.status_code)
-
-
-
-
-    def generateURL(self) -> str:
+    def generate_url(self) -> str:
         return f'https://www.imdb.com/search/title/?title_type={self.title_type}&genres={self.genere}' \
                '&start={}&explore=title_type,genres&ref_=adv_nxt'
 
-    def nextURL(self, num_of_web_page: int) -> str:
+    def next_url(self, num_of_web_page: int) -> str:
         return self.templateURL.format(num_of_web_page)
 
-    def getHTML(self, URL: str) -> bs4.BeautifulSoup:
-        raw_page = self.get_response(URL)
-        # raw_page: str = self.scrapper.get(URL, headers=self.header).text
-        return BeautifulSoup(raw_page.text, 'lxml')
-    def getNameContent(self, tag: bs4.BeautifulSoup) -> str:
-        try:
-            return tag.find('div', class_='lister-item-content').h3.a.text
-        except:
-            return "NA"
+    def get_html(self, url_html: str) -> BeautifulSoup:
+        raw_page: str = self.scrapper.get(url_html, self.header)
 
-    def getReleseYear(self, tag: bs4.BeautifulSoup) -> str:
-        try:
-            tag_h3:  bs4.BeautifulSoup = tag.find('div', class_='lister-item-content').h3
-            return tag_h3.find('span', class_='lister-item-year text-muted unbold').text
-        except:
-            return "NA"
+        return BeautifulSoup(raw_page, 'lxml')
 
-    def getTimeContent(self, tag: bs4.BeautifulSoup) -> str:
-        try:
-            tag_div: bs4.BeautifulSoup = tag.find('div', class_='lister-item-content')
-            tag_p: bs4.BeautifulSoup = tag_div.find('p', class_='text-muted')
-            return tag_p.find('span', class_='runtime').text
-        except:
-            return "NA"
-
-    def getCertificate(self, tag: bs4.BeautifulSoup) -> str:
-        try:
-            return tag.find('span', class_='certificate').text
-        except:
-            return "NA"
-
-    def getAllGeneres(self, tag: bs4.BeautifulSoup) -> str:
-        try:
-            tag_div: bs4.BeautifulSoup = tag.find('div', class_='lister-item-content')
-            tag_p: bs4.BeautifulSoup = tag_div.find('p', class_='text-muted')
-            return tag_p.find('span', class_='genre').text
-        except:
-            return "NA"
-
-    def getRatingImdb(self, tag: bs4.BeautifulSoup) -> str:
-        try:
-            tag_div: bs4.BeautifulSoup = tag.find('div', class_='lister-item-content')
-            tag_div2: bs4.BeautifulSoup = tag_div.find('div', class_='ratings-bar')
-            return tag_div2.find('div', class_='inline-block ratings-imdb-rating').strong.text
-        except:
-            return "NA"
-
-    def getRatingMetacritic(self, tag: bs4.BeautifulSoup) -> str:
-        try:
-            tag_div: bs4.BeautifulSoup = tag.find('div', class_='lister-item-content')
-            tag_div2: bs4.BeautifulSoup = tag_div.find('div', class_='ratings-bar')
-            return tag_div2.find('div', class_='inline-block ratings-metascore').span.text
-        except:
-            return "NA"
-
-    def getPageContent(self, tag: bs4.BeautifulSoup):
+    def get_film_page(self, tag: BeautifulSoup) -> BeautifulSoup:
         URI_page = tag.find("div", class_="lister-item-content").h3.a.get("href")
         URL = f"https://www.imdb.com{URI_page}"
 
-        film_page_content = self.get_response(URL)
-        # film_page_content = self.scrapper.get(f"https://www.imdb.com{URI_page}").text
-
-        soup_film_page = BeautifulSoup(film_page_content.text, "lxml")
+        soup_film_page = self.get_html(URL)
         return soup_film_page
 
-    def getCasting(self, soup_page_film: bs4.BeautifulSoup):
-        casting = []
-        soup_casting = soup_page_film.findAll("a", class_="sc-bfec09a1-1 fUguci")
-        for cast in soup_casting:
-            casting.append(cast.text)
-
-        return casting
-
-    def getDirector(self, soup_page_film: bs4.BeautifulSoup):
-        Director = []
-        soup_director = soup_page_film.findAll("li", class_="ipc-metadata-list__item")[0]
-
-        soup_director = soup_director.findAll("a", class_="ipc-metadata-list-item__list-content-item " \
-                                                           "ipc-metadata-list-item__list-content-item--link")
-
-        for director in soup_director:
-            Director.append(director.text)
-
-        return Director
-
-    def getWriters(self, soup_page_film: bs4.BeautifulSoup):
-        Writers = []
-        soup_writers = soup_page_film.findAll("li", class_="ipc-metadata-list__item " \
-                                                          "ipc-metadata-list-item--link")[1]
-
-        soup_writers = soup_writers.findAll("a", class_="ipc-metadata-list-item__list-content-item " \
-                                                          "ipc-metadata-list-item__list-content-item--link")
-
-        for director in soup_writers:
-            Writers.append(director.text)
-
-        return Writers
-
-
-
-    def getTagFilms(self, raw_page: bs4.BeautifulSoup) -> bs4.element.ResultSet:
-
-        return raw_page.findAll('div', class_='lister-item mode-advanced')
-
-
     def pipeFunctions(self, tag_film):
-        soup_page_film = self.getPageContent(tag_film)
-        self.dataset["NameContent"].append(self.getNameContent(tag_film))
-        self.dataset["ReleseYear"].append(self.getReleseYear(tag_film))
-        self.dataset["Certificate"].append(self.getCertificate(tag_film))
-        self.dataset["TimeContent"].append(self.getTimeContent(tag_film))
-        self.dataset["AllGeneres"].append(self.getAllGeneres(tag_film))
-        self.dataset["RatingImdb"].append(self.getRatingImdb(tag_film))
-        self.dataset["RatingMetacritic"].append(self.getRatingMetacritic(tag_film))
-        self.dataset["Casting"].append(self.getCasting(soup_page_film))
-        self.dataset["Directors"].append(self.getDirector(soup_page_film))
-        self.dataset["Writers"].append(self.getWriters(soup_page_film))
+        def get_name_content(tag: BeautifulSoup) -> str:
+            try:
+                return tag.find('div', class_='lister-item-content').h3.a.text
+            except AttributeError:
+                return "NA"
+
+        def get_release_year(tag: BeautifulSoup) -> str:
+            try:
+                tag_h3: bs4.BeautifulSoup = tag.find('div', class_='lister-item-content').h3
+                return tag_h3.find('span', class_='lister-item-year text-muted unbold').text
+            except AttributeError:
+                return "NA"
+
+        def get_time_content(tag: BeautifulSoup) -> str:
+            try:
+                tag_div: bs4.BeautifulSoup = tag.find('div', class_='lister-item-content')
+                tag_p: bs4.BeautifulSoup = tag_div.find('p', class_='text-muted')
+                return tag_p.find('span', class_='runtime').text
+            except AttributeError:
+                return "NA"
+
+        def get_certificate(tag: BeautifulSoup) -> str:
+            try:
+                return tag.find('span', class_='certificate').text
+            except AttributeError:
+                return "NA"
+
+        def get_all_generes(tag: bs4.BeautifulSoup) -> str:
+            try:
+                tag_div: bs4.BeautifulSoup = tag.find('div', class_='lister-item-content')
+                tag_p: bs4.BeautifulSoup = tag_div.find('p', class_='text-muted')
+                return tag_p.find('span', class_='genre').text
+            except AttributeError:
+                return "NA"
+
+        def get_rating_imdb(tag: bs4.BeautifulSoup) -> str:
+            try:
+                tag_div: bs4.BeautifulSoup = tag.find('div', class_='lister-item-content')
+                tag_div2: bs4.BeautifulSoup = tag_div.find('div', class_='ratings-bar')
+                return tag_div2.find('div', class_='inline-block ratings-imdb-rating').strong.text
+            except AttributeError:
+                return "NA"
+
+        def get_rating_metacritic(tag: bs4.BeautifulSoup) -> str:
+            try:
+                tag_div: bs4.BeautifulSoup = tag.find('div', class_='lister-item-content')
+                tag_div2: bs4.BeautifulSoup = tag_div.find('div', class_='ratings-bar')
+                return tag_div2.find('div', class_='inline-block ratings-metascore').span.text
+            except AttributeError:
+                return "NA"
+
+        def get_casting(soup_film: BeautifulSoup):
+            casting = []
+            soup_casting = soup_film.findAll("a", class_="sc-bfec09a1-1 fUguci")
+            for cast in soup_casting:
+                casting.append(cast.text)
+
+            return casting
+
+        def get_director(soup_film: BeautifulSoup):
+            director = []
+            soup_director = soup_film.findAll("li", class_="ipc-metadata-list__item")[0]
+            soup_director = soup_director.findAll("a", class_="ipc-metadata-list-item__list-content-item " \
+                                                              "ipc-metadata-list-item__list-content-item--link")
+
+            for director in soup_director:
+                director.append(director.text)
+
+            return director
+
+        def get_writers(soup_film: bs4.BeautifulSoup):
+            writers = []
+            soup_writers = soup_film.findAll("li", class_="ipc-metadata-list__item " \
+                                                               "ipc-metadata-list-item--link")[1]
+            soup_writers = soup_writers.findAll("a", class_="ipc-metadata-list-item__list-content-item " \
+                                                            "ipc-metadata-list-item__list-content-item--link")
+            for director in soup_writers:
+                writers.append(director.text)
+            return writers
+
+        soup_page_film = self.get_film_page(tag_film)
+        self.dataset["NameContent"].append(get_name_content(tag_film))
+        self.dataset["ReleseYear"].append(get_release_year(tag_film))
+        self.dataset["Certificate"].append(get_certificate(tag_film))
+        self.dataset["TimeContent"].append(get_time_content(tag_film))
+        self.dataset["AllGeneres"].append(get_all_generes(tag_film))
+        self.dataset["RatingImdb"].append(get_rating_imdb(tag_film))
+        self.dataset["RatingMetacritic"].append(get_rating_metacritic(tag_film))
+        self.dataset["Casting"].append(get_casting(soup_page_film))
+        self.dataset["Directors"].append(get_director(soup_page_film))
+        self.dataset["Writers"].append(get_writers(soup_page_film))
 
         self.films_scraped += 1
         print(self.films_scraped)
     def scrapPage(self, numPage):
-        URL_to_scrap: str = self.nextURL(numPage)
+        def get_tag_films(raw_page: bs4.BeautifulSoup) -> bs4.element.ResultSet:
+            return raw_page.findAll('div', class_='lister-item mode-advanced')
 
-        raw_page: bs4.BeautifulSoup = self.getHTML(URL_to_scrap)
+        url_to_scrap: str = self.next_url(numPage)
 
-        tags_films: bs4.element.ResultSet = self.getTagFilms(raw_page)
+        raw_page: BeautifulSoup = self.get_html(url_to_scrap)
 
-        # for tag_film in tags_films:
+        tags_films: bs4.element.ResultSet = get_tag_films(raw_page)
+
         with concurrent.futures.ThreadPoolExecutor() as executor:
             executor.map(self.pipeFunctions, tags_films)
-                # self.pipeFunctions(tag_film)
 
-    def saveDataset(self):
+    def save_dataset(self):
         df = pd.DataFrame.from_dict(self.dataset)
         df.to_csv("dataset.csv", index=False)
 
     def __call__(self, num_of_page=1):
-        for actual_num_page in range(1, 50*num_of_page + 1, 50):
-        # with concurrent.futures.ThreadPoolExecutor() as executor:
+        for actual_num_page in range(1, 50 * num_of_page + 1, 50):
             self.scrapPage(actual_num_page)
-            # executor.map(self.scrapPage, list(range(1, 50*num_of_page + 1, 50)))
 
-            # print(self.getPageContent(tag_film))
 
 
 
 
 
 if __name__ == '__main__':
-
     prueba = imdbDataSet(type_='movie', genere='comedy')
-    prueba(199)
-    prueba.saveDataset()
-    print(prueba.dataset["Casting"])
-
-
-
-
-
-
-
-
-
-
-
-
+    prueba(1)
+    prueba.save_dataset()

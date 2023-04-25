@@ -42,7 +42,7 @@ Donde:
 ## Uso del programa
 1. `cd ./ PRA1-Tipologia-y-ciclo-de-vida-de-los-datos/src`
 2. `pip install -r requirements.txt`
-3. `python3 -m main type_='movie', genre='comedy'`
+3. `python3 -m main.py type_=movie, genre=comedy`
 
 Este ejemplo es para extraer las 10000 primeras películas de comedia que aparecen en IMDb.
 

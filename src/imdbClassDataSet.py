@@ -53,8 +53,6 @@ class ImdbDataSet:
             self.lock.release()
             # Use of try-exception clausures dude to the exceptions that some proxies can through
             try:
-                # sleep(randint(1, 2))
-                print(proxy)
                 res = self.scrapper.get(url_page,
                                         proxies={"http": proxy,
                                                  "https": proxy},
@@ -310,7 +308,7 @@ class ImdbDataSet:
         self.dataset["Writers"].append(self.__get_writers(soup_page_film))
 
         self.films_scraped += 1
-        print(self.films_scraped)
+        print(f'{self.films_scraped} of {self.total_films} films', end='\r')
 
     def __scrap_page(self, numPage):
         """
@@ -339,5 +337,6 @@ class ImdbDataSet:
         df.to_csv("IMDb_data.csv", index=False)
 
     def __call__(self, num_of_page=1):
-        for actual_num_page in range(1, 50*num_of_page + 1, 50):
+        self.total_films = 50 * num_of_page
+        for actual_num_page in range(1, self.total_films + 1, 50):
             self.__scrap_page(actual_num_page)

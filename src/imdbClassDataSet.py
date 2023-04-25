@@ -5,10 +5,6 @@ from collections import defaultdict
 import threading
 import concurrent.futures
 from load_proxy import *
-from time import sleep
-from random import randint
-from requestClassModified import RequestModified
-import csv
 
 
 class ImdbDataSet:
@@ -36,8 +32,6 @@ class ImdbDataSet:
                         'User-Agent':
                         'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/110.0'
                         }
-        self.films_scraped = 0
-
 
     def __get_response(self, url_page: str):
         """
@@ -53,13 +47,10 @@ class ImdbDataSet:
         # If the response code is 50 times different from 200
         not_successful_code = 0
         while not_successful_code <= 50:
-            print(f'The size of the queue is:{self.proxys.qsize()}')
             self.lock.acquire()
             proxy = self.proxys.get()  # Taking an IP from the queue
-
             # If the queue is empty, it will be load again
             if self.proxys.empty():
-                print("LOADING")
                 self.proxys = load_proxy()
             self.lock.release()
             # Use of try-exception clausures dude to the exceptions that some proxies can through
@@ -71,12 +62,11 @@ class ImdbDataSet:
                                         timeout=10)
 
             except Exception as e:
-                print(e)
                 continue
             if res.status_code == 200:
-                # self.lock.acquire()
+                self.lock.acquire()
                 self.proxys.put(proxy)
-                # self.lock.release()
+                self.lock.release()
                 return res
 
             else:
@@ -207,7 +197,7 @@ class ImdbDataSet:
         except AttributeError:
             return "NA"
 
-    def __get_casting(self, soup_page_film: bs4.BeautifulSoup):
+    def __get_casting(self, soup_page_film: bs4.BeautifulSoup) -> list:
         """
         Return the information about the casting of the content selected.
         Args:
@@ -222,7 +212,7 @@ class ImdbDataSet:
 
         return casting
 
-    def __get_director(self, soup_page_film: bs4.BeautifulSoup):
+    def __get_director(self, soup_page_film: bs4.BeautifulSoup) -> list:
         """
         Return the information about the directors of the content selected.
         Args:
@@ -241,7 +231,7 @@ class ImdbDataSet:
 
         return directors
 
-    def __get_writers(self, soup_page_film: bs4.BeautifulSoup):
+    def __get_writers(self, soup_page_film: bs4.BeautifulSoup) -> list:
         """
         Return the information about the writers of the content selected.
         Args:
@@ -261,7 +251,7 @@ class ImdbDataSet:
 
         return writers
 
-    def __get_tags(self, raw_page: bs4.BeautifulSoup) -> bs4.element.ResultSet:
+    def __get_tags(self, raw_page: bs4.BeautifulSoup) -> list:
         """
         Return a list with the 50 tags with information of each content selected (films, TV series, etc).
 
@@ -273,7 +263,7 @@ class ImdbDataSet:
 
         return raw_page.findAll('div', class_='lister-item mode-advanced')
 
-    def __get_film_page(self, tag_content: bs4.BeautifulSoup):
+    def __get_film_page(self, tag_content: bs4.BeautifulSoup) -> bs4.BeautifulSoup:
         """
         Return the page of the content selected in BeautifulSoup format from the tag obtained from the principal page.
         Args:
@@ -287,7 +277,7 @@ class ImdbDataSet:
         film_page_content = self.__get_response(url_page)
 
         soup_film_page = BeautifulSoup(film_page_content.text, "lxml")
-        # soup_film_page = self.__get_response(url_page)
+
         return soup_film_page
 
     def __pipe_functions(self, tag_content):
@@ -316,11 +306,7 @@ class ImdbDataSet:
         self.dataset["Directors"].append(self.__get_director(soup_page_film))
         self.dataset["Writers"].append(self.__get_writers(soup_page_film))
 
-        self.films_scraped += 1
-        print(self.films_scraped )
-        # progress_bar(self.films_scraped, self.total_content )
-
-    def __scrap_page(self, num_page):
+    def __scrap_page(self, num_page: int):
         """
         Method for scrap the page which contains 50 cards of the content selected. For example, if the
         type_ variable is films, the 50 cards will have films.
@@ -333,18 +319,10 @@ class ImdbDataSet:
 
         raw_page: bs4.BeautifulSoup = self.__get_html(url_to_scrap)
 
-        tags_films: bs4.element.ResultSet = self.__get_tags(raw_page)
+        tags_films: list = self.__get_tags(raw_page)
 
-        # for tag_content in tags_films:
         with concurrent.futures.ThreadPoolExecutor() as executor:
             executor.map(self.__pipe_functions, tags_films)
-        # threads = []
-        # for tags in tags_films:
-        #     t = threading.Thread(target=self.__pipe_functions, args=[tags])
-        #     t.start()
-        #     threads.append(t)
-        # for thread in threads:
-        #     thread.join()
     def save_dataset(self):
         """
         Method to save the variable dataset as csv with the name IMDb_data without index.
@@ -355,29 +333,6 @@ class ImdbDataSet:
         df_dataset.to_csv("IMDb_data.csv", index=False)
 
     def __call__(self, num_of_page=1):
-        # self.total_content = num_of_page * 50
-        # progress_bar(self.films_scraped, self.total_content)
+
         for actual_num_page in range(1, 50*num_of_page + 1, 50):
             self.__scrap_page(actual_num_page)
-
-
-
-
-
-
-
-if __name__ == '__main__':
-
-    prueba = ImdbDataSet(type_='movie', genre='comedy')
-    prueba(200)
-    prueba.save_dataset()
-
-
-
-
-
-
-
-
-
-

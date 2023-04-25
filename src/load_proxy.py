@@ -32,8 +32,3 @@ def progress_bar(progress, total):
     percent = 100 * (progress / float(total))
     bar = '█' * int(percent) + '-' * (100 - int(percent))
     print(f"{progress}|{bar}| {percent:.2f}%", end="\r")
-
-
-if __name__ == "__main__":
-    a = load_proxy()
-    print('hola')
